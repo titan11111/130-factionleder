@@ -2,136 +2,1406 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="format-detection" content="telephone=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="出張プログラム">
-    <title>出張プログラム視認化ツール 🎮</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>桜沢新幹線駅 ストップチャレンジ — 電車でGO!超越版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        html, body {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; position: fixed; overscroll-behavior: none;
+            background: #1a1a2e; font-family: 'Helvetica Neue', Arial, sans-serif;
+            touch-action: manipulation;
+        }
+        #gameCanvas {
+            display: block; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%; pointer-events: auto; touch-action: none;
+        }
+        .ui-layer {
+            position: fixed; top: max(20px, env(safe-area-inset-top, 20px));
+            left: 50%; transform: translateX(-50%); pointer-events: none;
+            text-align: center; color: white; text-shadow: 2px 2px 8px rgba(0,0,0,0.9);
+            width: 90vw; z-index: 10;
+        }
+        #gameTitle {
+            font-size: clamp(1rem, 4vw, 1.8rem); font-weight: 900; letter-spacing: 0.05em;
+            color: #f0f4ff; text-shadow: 0 0 15px rgba(100,160,255,0.7), 2px 2px 8px rgba(0,0,0,0.9);
+            margin-bottom: 8px;
+        }
+        #status {
+            font-size: clamp(0.9rem, 3vw, 1.3rem); margin-bottom: 10px;
+            min-height: 2.8em; font-weight: 600; white-space: pre-line;
+        }
+        #score {
+            font-size: clamp(1.6rem, 6vw, 2.8rem); font-weight: 900; min-height: 1.4em;
+        }
+        #bestScore {
+            font-size: clamp(0.8rem, 2.5vw, 1rem); color: #ffd700;
+            font-weight: 700; margin-top: 6px;
+        }
+        .game-controls {
+            position: fixed; left: 0; right: 0; bottom: 0; z-index: 25;
+            pointer-events: none; display: flex; justify-content: center; align-items: center;
+            padding: 10px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+        }
+        .game-action-btn {
+            pointer-events: auto; touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent; user-select: none;
+            cursor: pointer; border: 2px solid transparent; border-radius: 14px;
+            min-height: 52px; min-width: min(90vw, 340px); padding: 14px 28px;
+            font-family: inherit; font-size: clamp(1.05rem, 3.6vw, 1.25rem);
+            font-weight: 800; letter-spacing: 0.08em; color: #eef6ff;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.75);
+            background-image:
+                linear-gradient(165deg, rgba(255,255,255,0.12) 0%, transparent 40%),
+                linear-gradient(180deg, #2a5088 0%, #142a50 100%),
+                linear-gradient(125deg, rgba(140,210,255,0.95), rgba(0,110,200,0.75), rgba(0,190,220,0.8));
+            box-shadow: 0 4px 20px rgba(0,40,90,0.45), inset 0 1px 0 rgba(255,255,255,0.22);
+            transition: transform 0.06s ease-out, filter 0.06s ease-out, opacity 0.12s ease-out;
+        }
+        .game-action-btn.brake-ready {
+            background-image:
+                linear-gradient(165deg, rgba(255,255,255,0.12) 0%, transparent 40%),
+                linear-gradient(180deg, #cc4444 0%, #881111 100%),
+                linear-gradient(125deg, rgba(255,140,140,0.95), rgba(220,50,50,0.85), rgba(255,80,80,0.9));
+            animation: brakePulse 0.8s ease-in-out infinite alternate;
+        }
+        @keyframes brakePulse {
+            from { box-shadow: 0 4px 20px rgba(220,40,40,0.6), inset 0 1px 0 rgba(255,255,255,0.22); }
+            to   { box-shadow: 0 6px 32px rgba(255,60,60,0.9), inset 0 1px 0 rgba(255,255,255,0.22); }
+        }
+        .game-action-btn:active:not(:disabled) { transform: scale(0.96); filter: brightness(0.94); }
+        .game-action-btn:disabled { opacity: 0.52; cursor: default; transform: none; filter: grayscale(0.15); animation: none; }
+    </style>
 </head>
 <body>
-    <!-- スタート画面（出張する？＝BGM開始トリガー） -->
-    <div id="startScreen" class="start-screen">
-        <div class="start-screen-inner">
-            <h1 class="start-title">🗺️ 出張プログラム<br>視認化ツール</h1>
-            <p class="start-subtitle">1ヶ月の出張をゲーム感覚で計画</p>
-            <button type="button" id="startBtn" class="start-btn">出張する？</button>
-        </div>
-    </div>
 
-    <div id="mainScreen" class="container" style="display: none;">
-        <header class="header">
-            <h1 class="title">🗺️ 出張プログラム視認化ツール</h1>
-            <div class="month-selector">
-                <button type="button" id="prevMonthBtn" class="month-btn" aria-label="前月">◀</button>
-                <span id="monthDisplay" class="month-display">2026年 4月</span>
-                <button type="button" id="nextMonthBtn" class="month-btn" aria-label="翌月">▶</button>
-            </div>
-        </header>
+<canvas id="gameCanvas"></canvas>
 
-        <main class="main">
-            <section class="calendar-section">
-                <div class="calendar-container">
-                    <div class="weekdays">
-                        <div class="weekday">日</div>
-                        <div class="weekday">月</div>
-                        <div class="weekday">火</div>
-                        <div class="weekday">水</div>
-                        <div class="weekday">木</div>
-                        <div class="weekday">金</div>
-                        <div class="weekday">土</div>
-                    </div>
-                    <div id="calendarGrid" class="calendar-grid"></div>
-                </div>
-            </section>
-        </main>
+<div class="ui-layer">
+    <div id="gameTitle">🚄 桜沢新幹線駅 ストップチャレンジ</div>
+    <div id="status">①「発進」②「ブレーキ」③「もう一度挑戦」で繰り返し</div>
+    <div id="score"></div>
+    <div id="bestScore"></div>
+</div>
 
-        <!-- コントロールパネル
-             desktop : 常時表示のボトムパネル（タブなし・全セクション表示）
-             mobile  : 55/45分割の下半分（タブ切り替え＋アクションバー固定）
-        -->
-        <div id="controlPanel" class="control-panel">
+<div class="game-controls">
+    <button type="button" id="gameActionBtn" class="game-action-btn">発進</button>
+</div>
 
-            <!-- タブバー（mobile のみ表示） -->
-            <div class="cp-tabs" role="tablist">
-                <button type="button" class="cp-tab active"
-                        data-target="cpRegions"
-                        role="tab" aria-selected="true"
-                        aria-controls="cpRegions">🎯 地域を選ぶ</button>
-                <button type="button" class="cp-tab"
-                        data-target="cpStatus"
-                        role="tab" aria-selected="false"
-                        aria-controls="cpStatus">📍 配置状態</button>
-            </div>
+<script>
+/* ============================================================
+   桜沢新幹線駅 ストップチャレンジ — 電車でGO!超越版
+   ============================================================ */
 
-            <!-- ペイン1：地域タグ -->
-            <div class="cp-pane active" id="cpRegions" role="tabpanel">
-                <section class="tags-section" id="tagsSection">
-                    <h2>🎯 出張地域を選ぶ</h2>
-                    <div class="tags-container">
-                        <h3 class="tags-title">プリセット地域</h3>
-                        <div id="tagsPool" class="tags-pool"></div>
-                    </div>
-                    <div class="custom-region-container">
-                        <h3 class="tags-title">カスタム地域を追加</h3>
-                        <div class="input-group">
-                            <input type="text" id="customRegionInput" placeholder="地域名を入力（例：横浜、大阪）" class="custom-input">
-                            <button type="button" id="addRegionBtn" class="add-btn">➕ 追加</button>
-                        </div>
-                        <div id="customTagsPool" class="custom-tags-pool"></div>
-                    </div>
-                </section>
-            </div>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const statusEl = document.getElementById('status');
+const scoreEl = document.getElementById('score');
+const bestScoreEl = document.getElementById('bestScore');
+const gameActionBtn = document.getElementById('gameActionBtn');
 
-            <!-- ペイン2：配置状態 -->
-            <div class="cp-pane" id="cpStatus" role="tabpanel">
-                <section class="status-section">
-                    <h2>📍 配置状態</h2>
-                    <div class="status-container">
-                        <div class="placement-list">
-                            <h3>配置済み出張地</h3>
-                            <div id="placementList" class="placement-items">
-                                <p class="empty-state">まだ配置されていません</p>
-                            </div>
-                        </div>
-                        <div class="status-stats">
-                            <div class="stat-item">
-                                <span class="stat-label">配置済み</span>
-                                <span id="placedCount" class="stat-value">0</span>
-                            </div>
-                            <div class="stat-item">
-                                <span class="stat-label">残り日数</span>
-                                <span id="remainingDays" class="stat-value">30</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-            </div>
+/* ---------- 物理定数 ---------- */
+const BRAKE_RAMP = 0.022;
+const MAX_DECEL = 0.38;
+const DRAG_K = 0.0075;
+const STOP_SPEED = 0.07;
+const TRAIN_Y_DOWN_CM = 2.6;
+const TRAIN_Y_EXTRA_DOWN_PX = (96 / 2.54) * TRAIN_Y_DOWN_CM;
 
-            <!-- アクションバー：どちらのタブでも常時表示 -->
-            <div class="cp-action-bar">
-                <section class="action-section">
-                    <button type="button" id="resetBtn" class="action-btn reset-btn">🔄 リセット</button>
-                    <button type="button" id="undoBtn" class="action-btn undo-btn">↩️ アンドゥ</button>
-                    <button type="button" id="pdfBtn" class="action-btn pdf-btn">📄 PDFで決定</button>
-                </section>
-            </div>
+/* ---------- ゲーム変数 ---------- */
+let gameState = 'START';
+let trainX = 0;
+let speed = 0;
+let brakePressure = 0;
+let targetX = 0;
+let canvasW = 0;
+let canvasH = 0;
+let now = 0;
+let dramaticPulse = 0;
+let brakeStartX = null;
+let matchResult = '';
+let bestDiff = parseFloat(localStorage.getItem('sakurazawa_best') || 'Infinity');
+let successStreak = parseInt(localStorage.getItem('sakurazawa_streak') || '0');
+let totalAttempts = parseInt(localStorage.getItem('sakurazawa_attempts') || '0');
 
-        </div>
-    </div>
+/* ---------- 内部合成音声（疾走・ブレーキ） ---------- */
+let audioCtx = null;
+/** @type {null | {
+ *   ac: AudioContext,
+ *   master: GainNode,
+ *   motorOsc: OscillatorNode, motorGain: GainNode,
+ *   whineOsc: OscillatorNode, whineGain: GainNode,
+ *   noiseBP: BiquadFilterNode, noiseGain: GainNode,
+ *   brakeOsc: OscillatorNode, brakeOscGain: GainNode,
+ *   brakeNF: BiquadFilterNode, brakeNG: GainNode,
+ * }} */
+let trainSynth = null;
 
-    <div id="toast" class="toast"></div>
-    <div id="loadingOverlay" class="loading-overlay">
-        <div class="loading-spinner"></div>
-        <p>PDFを生成中...</p>
-    </div>
+function getAudioCtx() {
+    if (audioCtx) return audioCtx;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audioCtx = new AC();
+    return audioCtx;
+}
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="app.js"></script>
+function unlockAudio() {
+    const c = getAudioCtx();
+    if (c && c.state === 'suspended') c.resume().catch(() => {});
+}
+
+function ensureTrainSynth() {
+    const ac = getAudioCtx();
+    if (!ac || trainSynth) return;
+
+    const master = ac.createGain();
+    master.gain.value = 0.2;
+
+    const motorOsc = ac.createOscillator();
+    motorOsc.type = 'sawtooth';
+    motorOsc.frequency.value = 66;
+    const motorGain = ac.createGain();
+    motorGain.gain.value = 0;
+    motorOsc.connect(motorGain);
+
+    const whineOsc = ac.createOscillator();
+    whineOsc.type = 'triangle';
+    whineOsc.frequency.value = 360;
+    const whineGain = ac.createGain();
+    whineGain.gain.value = 0;
+    whineOsc.connect(whineGain);
+
+    const noiseLen = Math.floor(ac.sampleRate * 1.25);
+    const noiseBuf = ac.createBuffer(1, noiseLen, ac.sampleRate);
+    const ch0 = noiseBuf.getChannelData(0);
+    for (let i = 0; i < noiseLen; i++) ch0[i] = Math.random() * 2 - 1;
+    const noiseSrc = ac.createBufferSource();
+    noiseSrc.buffer = noiseBuf;
+    noiseSrc.loop = true;
+    const noiseBP = ac.createBiquadFilter();
+    noiseBP.type = 'bandpass';
+    noiseBP.frequency.value = 620;
+    noiseBP.Q.value = 0.65;
+    const noiseGain = ac.createGain();
+    noiseGain.gain.value = 0;
+    noiseSrc.connect(noiseBP);
+    noiseBP.connect(noiseGain);
+
+    const brakeOsc = ac.createOscillator();
+    brakeOsc.type = 'sawtooth';
+    brakeOsc.frequency.value = 240;
+    const brakeOscGain = ac.createGain();
+    brakeOscGain.gain.value = 0;
+    brakeOsc.connect(brakeOscGain);
+
+    const bNoiseBuf = ac.createBuffer(1, noiseLen, ac.sampleRate);
+    const bch = bNoiseBuf.getChannelData(0);
+    for (let j = 0; j < noiseLen; j++) bch[j] = Math.random() * 2 - 1;
+    const brakeNoiseSrc = ac.createBufferSource();
+    brakeNoiseSrc.buffer = bNoiseBuf;
+    brakeNoiseSrc.loop = true;
+    const brakeNF = ac.createBiquadFilter();
+    brakeNF.type = 'bandpass';
+    brakeNF.frequency.value = 2100;
+    brakeNF.Q.value = 2.8;
+    const brakeNG = ac.createGain();
+    brakeNG.gain.value = 0;
+    brakeNoiseSrc.connect(brakeNF);
+    brakeNF.connect(brakeNG);
+
+    motorGain.connect(master);
+    whineGain.connect(master);
+    noiseGain.connect(master);
+    brakeOscGain.connect(master);
+    brakeNG.connect(master);
+    master.connect(ac.destination);
+
+    motorOsc.start();
+    whineOsc.start();
+    noiseSrc.start();
+    brakeOsc.start();
+    brakeNoiseSrc.start();
+
+    trainSynth = {
+        ac,
+        master,
+        motorOsc, motorGain,
+        whineOsc, whineGain,
+        noiseBP, noiseGain,
+        brakeOsc, brakeOscGain,
+        brakeNF, brakeNG,
+    };
+}
+
+function muteTrainSynth() {
+    if (!trainSynth) return;
+    trainSynth.motorGain.gain.value = 0;
+    trainSynth.whineGain.gain.value = 0;
+    trainSynth.noiseGain.gain.value = 0;
+    trainSynth.brakeOscGain.gain.value = 0;
+    trainSynth.brakeNG.gain.value = 0;
+}
+
+function updateTrainSynth() {
+    if (!trainSynth || trainSynth.ac.state !== 'running') return;
+
+    if (gameState === 'MOVING') {
+        const spNorm = Math.min(1.15, Math.max(0, (speed - 2) / 26));
+        const runVol = 0.11 + spNorm * 0.11;
+        trainSynth.motorGain.gain.value = runVol * 0.52;
+        trainSynth.whineGain.gain.value = runVol * 0.38;
+        trainSynth.noiseGain.gain.value = runVol * 0.42;
+        trainSynth.brakeOscGain.gain.value = 0;
+        trainSynth.brakeNG.gain.value = 0;
+        trainSynth.motorOsc.frequency.value = 56 + spNorm * 34;
+        trainSynth.whineOsc.frequency.value = 280 + spNorm * 520;
+        trainSynth.noiseBP.frequency.value = 360 + spNorm * 980;
+    } else if (gameState === 'BRAKING') {
+        const spdFact = Math.min(1, speed / 22);
+        const brk = brakePressure;
+        const runFade = Math.max(0, spdFact * (1 - brk * 0.92));
+        trainSynth.motorGain.gain.value = runFade * 0.1;
+        trainSynth.whineGain.gain.value = runFade * 0.065;
+        trainSynth.noiseGain.gain.value = runFade * 0.13 + brk * 0.055;
+        const squeal = Math.min(1, brk * 1.05) * Math.min(1, spdFact + 0.12);
+        trainSynth.brakeOscGain.gain.value = 0.048 + squeal * 0.17;
+        trainSynth.brakeNG.gain.value = 0.032 + squeal * 0.15;
+        trainSynth.brakeOsc.frequency.value = 300 - brk * 105 + spdFact * 52;
+        trainSynth.brakeNF.frequency.value = 1500 + brk * 1100 + spdFact * 220;
+    } else {
+        muteTrainSynth();
+    }
+}
+
+/* ---------- 乗客データ ---------- */
+const PASSENGERS = [
+    { relX: 0.28, label: 'businessman', skinTone: '#D4956A', hairCol: '#1a1a1a',
+      shirtCol: '#ffffff', pantsCol: '#1e2a3a', jacketCol: '#2c3e6b', tieCol: '#c0392b',
+      hasLuggage: true, luggageCol: '#2c2c2c', pose: 'phone' },
+    { relX: 0.42, label: 'elderly_lady', skinTone: '#C8A882', hairCol: '#d0d0d0',
+      shirtCol: '#8e44ad', pantsCol: '#5d4037', jacketCol: '#7b3f9e', tieCol: null,
+      hasLuggage: false, luggageCol: null, pose: 'cane' },
+    { relX: 0.54, label: 'young_woman', skinTone: '#F0C8A0', hairCol: '#3d1c02',
+      shirtCol: '#e8a0b0', pantsCol: '#4a4a6a', jacketCol: '#c0507a', tieCol: null,
+      hasLuggage: true, luggageCol: '#e74c3c', pose: 'stand' },
+    { relX: 0.65, label: 'child', skinTone: '#F5C09A', hairCol: '#2c1a0a',
+      shirtCol: '#27ae60', pantsCol: '#2980b9', jacketCol: null, tieCol: null,
+      hasLuggage: true, luggageCol: '#c0392b', pose: 'lookup' },
+    { relX: 0.76, label: 'tourist', skinTone: '#FDDBB4', hairCol: '#8B5E3C',
+      shirtCol: '#1abc9c', pantsCol: '#e67e22', jacketCol: '#16a085', tieCol: null,
+      hasLuggage: true, luggageCol: '#7f8c8d', pose: 'camera' },
+];
+
+/* ============================================================
+   初期化・ゲーム制御
+   ============================================================ */
+function init() {
+    canvasW = window.innerWidth;
+    canvasH = window.innerHeight;
+    canvas.width = canvasW;
+    canvas.height = canvasH;
+    targetX = canvasW * 0.72;
+    updateBestDisplay();
+    resetGame();
+}
+
+function resetGame() {
+    gameState = 'START';
+    trainX = -canvasW * 0.9;
+    speed = 0;
+    brakePressure = 0;
+    dramaticPulse = 0;
+    brakeStartX = null;
+    matchResult = '';
+    statusEl.innerText = '①「発進」②「ブレーキ」③「もう一度挑戦」で繰り返し';
+    scoreEl.innerText = '';
+    scoreEl.className = '';
+    muteTrainSynth();
+    syncActionButtonUI();
+}
+
+function updateBestDisplay() {
+    if (isFinite(bestDiff)) {
+        bestScoreEl.innerText = `🏆 ベスト: ${(bestDiff/10).toFixed(1)}m | 挑戦${totalAttempts}回 連続成功${successStreak}回`;
+    } else {
+        bestScoreEl.innerText = totalAttempts > 0 ? `挑戦${totalAttempts}回 連続成功${successStreak}回` : '';
+    }
+}
+
+function handleInput() {
+    if (gameState === 'START') {
+        unlockAudio();
+        ensureTrainSynth();
+        gameState = 'MOVING';
+        speed = 19 + Math.random() * 9;
+        brakePressure = 0;
+        brakeStartX = null;
+        totalAttempts++;
+        localStorage.setItem('sakurazawa_attempts', totalAttempts);
+        statusEl.innerText = '②「ブレーキ」ボタンで停止';
+    } else if (gameState === 'MOVING') {
+        gameState = 'BRAKING';
+        brakePressure = 0;
+        brakeStartX = trainX + getTrainNoseOffsetPx();
+        statusEl.innerText = 'ブレーーキ！！滑り込み中…';
+    } else if (gameState === 'FINISHED') {
+        resetGame();
+    }
+}
+
+/* ---------- デバウンス制御（状態別最適化） ---------- */
+let lastActionActivateAt = 0;
+let suppressActionClick = false;
+
+function getCurrentDebounceMs() {
+    if (gameState === 'START') return 320;    // 誤発進防止
+    if (gameState === 'MOVING') return 60;    // 素早いブレーキを優先
+    if (gameState === 'FINISHED') return 400; // 連打防止
+    return 320;
+}
+
+function syncActionButtonUI() {
+    if (!gameActionBtn) return;
+    gameActionBtn.className = 'game-action-btn';
+    
+    if (gameState === 'START') {
+        gameActionBtn.textContent = '🚄 発進';
+        gameActionBtn.disabled = false;
+    } else if (gameState === 'MOVING') {
+        gameActionBtn.textContent = '🛑 ブレーキ';
+        gameActionBtn.disabled = false;
+        gameActionBtn.classList.add('brake-ready');
+    } else if (gameState === 'BRAKING') {
+        gameActionBtn.textContent = '⏳ ブレーキ中…';
+        gameActionBtn.disabled = true;
+    } else if (gameState === 'FINISHED') {
+        gameActionBtn.textContent = '🔄 もう一度挑戦';
+        gameActionBtn.disabled = false;
+    }
+}
+
+function tryActivateGameButton(ev) {
+    if (!gameActionBtn || gameActionBtn.disabled) return;
+    unlockAudio();
+
+    const t = performance.now();
+    const debounceMs = getCurrentDebounceMs();
+
+    if (t - lastActionActivateAt < debounceMs) {
+        if (ev && ev.cancelable) ev.preventDefault();
+        return;
+    }
+    lastActionActivateAt = t;
+    
+    if (ev && ev.cancelable) ev.preventDefault();
+    try { navigator.vibrate(12); } catch (_) {}
+    
+    handleInput();
+    syncActionButtonUI();
+}
+
+/* ---------- イベントバインド ---------- */
+function bindGameActionButton() {
+    if (!gameActionBtn) return;
+    
+    gameActionBtn.addEventListener('touchstart', e => {
+        e.stopPropagation();
+        suppressActionClick = true;
+        tryActivateGameButton(e);
+        setTimeout(() => { suppressActionClick = false; }, 480);
+    }, { passive: false });
+    
+    gameActionBtn.addEventListener('pointerdown', e => {
+        if (e.pointerType === 'touch') return;
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        e.stopPropagation();
+        tryActivateGameButton(e);
+    });
+    
+    gameActionBtn.addEventListener('click', e => {
+        if (suppressActionClick) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+        tryActivateGameButton(e);
+    });
+    
+    gameActionBtn.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        tryActivateGameButton(e);
+    });
+}
+
+bindGameActionButton();
+
+document.addEventListener('pointerdown', unlockAudio, { once: true });
+document.addEventListener('keydown', unlockAudio, { once: true });
+
+/* iOS対策 */
+let lastDocTouchEnd = 0;
+document.addEventListener('touchend', e => {
+    const now = Date.now();
+    if (now - lastDocTouchEnd < 300 && e.cancelable) e.preventDefault();
+    lastDocTouchEnd = now;
+}, { passive: false });
+
+window.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+window.addEventListener('resize', init);
+
+/* ============================================================
+   HUD描画（運転台表示）
+   ============================================================ */
+function drawHUD() {
+    if (gameState !== 'MOVING' && gameState !== 'BRAKING') return;
+    
+    const hudX = 20;
+    const hudY = 80;
+    const hudW = Math.min(200, canvasW * 0.25);
+    const hudH = 100;
+    
+    // HUD背景
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 15, 30, 0.85)';
+    ctx.strokeStyle = 'rgba(0, 150, 255, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.fillRect(hudX, hudY, hudW, hudH);
+    ctx.strokeRect(hudX, hudY, hudW, hudH);
+    
+    // 速度表示
+    const displaySpeed = Math.round(speed * 12);
+    ctx.fillStyle = displaySpeed > 200 ? '#ff4444' : displaySpeed > 100 ? '#ffaa22' : '#44ff44';
+    ctx.font = `bold ${Math.max(16, hudW * 0.08)}px monospace`;
+    ctx.textAlign = 'left';
+    ctx.fillText(`SPEED: ${displaySpeed} km/h`, hudX + 10, hudY + 25);
+    
+    // ブレーキ圧ゲージ
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${Math.max(12, hudW * 0.06)}px monospace`;
+    ctx.fillText('BRAKE:', hudX + 10, hudY + 50);
+    
+    const gaugeX = hudX + 70;
+    const gaugeY = hudY + 38;
+    const gaugeW = hudW - 90;
+    const gaugeH = 12;
+    
+    // ゲージ背景
+    ctx.fillStyle = '#333333';
+    ctx.fillRect(gaugeX, gaugeY, gaugeW, gaugeH);
+    
+    // ゲージ本体
+    if (brakePressure > 0) {
+        const pressure = Math.min(1, brakePressure);
+        ctx.fillStyle = pressure > 0.8 ? '#ff3333' : pressure > 0.4 ? '#ffaa22' : '#44ff44';
+        ctx.fillRect(gaugeX, gaugeY, gaugeW * pressure, gaugeH);
+    }
+    
+    // 残距離表示
+    const noseX = trainX + getTrainNoseOffsetPx();
+    const distToStop = Math.max(0, targetX - noseX);
+    const distMeters = (distToStop / 10).toFixed(1);
+    ctx.fillStyle = distToStop < 100 ? '#ff4444' : distToStop < 300 ? '#ffaa22' : '#44ff44';
+    ctx.fillText(`DIST: ${distMeters}m`, hudX + 10, hudY + 75);
+    
+    ctx.restore();
+}
+
+/* ============================================================
+   描画：空・遠景
+   ============================================================ */
+function drawSky() {
+    const grad = ctx.createLinearGradient(0, 0, 0, canvasH * 0.48);
+    grad.addColorStop(0, '#1a3a6b');
+    grad.addColorStop(0.4, '#2d6aad');
+    grad.addColorStop(1, '#87CEEB');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvasW, canvasH * 0.48);
+    
+    // 遠景ビル群
+    const buildings = [
+        { rx:0.05, ry:0.30, rw:0.04, rh:0.12, col:'#1e3a5f' },
+        { rx:0.10, ry:0.25, rw:0.03, rh:0.17, col:'#162d4a' },
+        { rx:0.14, ry:0.28, rw:0.05, rh:0.14, col:'#1e3a5f' },
+        { rx:0.82, ry:0.22, rw:0.04, rh:0.20, col:'#162d4a' },
+        { rx:0.87, ry:0.27, rw:0.06, rh:0.15, col:'#1e3a5f' },
+        { rx:0.94, ry:0.24, rw:0.05, rh:0.18, col:'#162d4a' },
+    ];
+    
+    buildings.forEach(b => {
+        ctx.fillStyle = b.col;
+        const bx = canvasW * b.rx, by = canvasH * b.ry;
+        const bw = canvasW * b.rw, bh = canvasH * b.rh;
+        ctx.fillRect(bx, by, bw, bh);
+        
+        ctx.fillStyle = 'rgba(255,240,150,0.4)';
+        for (let wy = by + 4; wy < by + bh - 4; wy += 8) {
+            for (let wx = bx + 3; wx < bx + bw - 3; wx += 7) {
+                if (Math.random() > 0.5) ctx.fillRect(wx, wy, 3, 4);
+            }
+        }
+    });
+}
+
+/* ============================================================
+   描画：路盤・線路
+   ============================================================ */
+function drawTrackBed() {
+    const mid = canvasH * 0.52;
+    const trackH = canvasH * 0.48;
+    
+    const ballastGrad = ctx.createLinearGradient(0, mid, 0, mid + trackH);
+    ballastGrad.addColorStop(0, '#6b6560');
+    ballastGrad.addColorStop(0.2, '#5a5450');
+    ballastGrad.addColorStop(1, '#3d3a36');
+    ctx.fillStyle = ballastGrad;
+    ctx.fillRect(0, mid, canvasW, trackH);
+    
+    for (let i = 0; i < 800; i++) {
+        const px = pseudoRand(i * 3) * canvasW;
+        const py = mid + pseudoRand(i * 3 + 1) * trackH * 0.6;
+        const pr = 1.5 + pseudoRand(i * 3 + 2) * 2.5;
+        const bright = 0.5 + pseudoRand(i * 7) * 0.5;
+        ctx.fillStyle = `rgba(${Math.floor(bright*140)},${Math.floor(bright*130)},${Math.floor(bright*120)},0.6)`;
+        ctx.beginPath();
+        ctx.ellipse(px, py, pr, pr * 0.6, pseudoRand(i)*Math.PI, 0, Math.PI*2);
+        ctx.fill();
+    }
+    
+    const sleeperY = mid + canvasH * 0.06;
+    const sleeperH = canvasH * 0.14;
+    const sleeperW = canvasW * 0.032;
+    const sleeperGap = canvasW * 0.055;
+    
+    for (let sx = -sleeperGap; sx < canvasW + sleeperGap; sx += sleeperGap) {
+        const sg = ctx.createLinearGradient(sx, sleeperY, sx + sleeperW, sleeperY + sleeperH);
+        sg.addColorStop(0, '#4a3828');
+        sg.addColorStop(0.3, '#5c4a36');
+        sg.addColorStop(0.7, '#4a3828');
+        sg.addColorStop(1, '#3a2e20');
+        ctx.fillStyle = sg;
+        ctx.fillRect(sx, sleeperY, sleeperW, sleeperH);
+        
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.lineWidth = 0.8;
+        for (let li = 0; li < 4; li++) {
+            ctx.beginPath();
+            ctx.moveTo(sx + sleeperW * 0.1 + li * sleeperW * 0.22, sleeperY);
+            ctx.lineTo(sx + sleeperW * 0.1 + li * sleeperW * 0.22, sleeperY + sleeperH);
+            ctx.stroke();
+        }
+        
+        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        ctx.fillRect(sx, sleeperY, sleeperW, 3);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(sx, sleeperY + sleeperH - 3, sleeperW, 3);
+    }
+    
+    drawRail(mid + canvasH * 0.075);
+    drawRail(mid + canvasH * 0.155);
+}
+
+function drawRail(ry) {
+    const rh = Math.max(6, canvasH * 0.018);
+    const rg = ctx.createLinearGradient(0, ry, 0, ry + rh);
+    rg.addColorStop(0, '#e8e8e8');
+    rg.addColorStop(0.15, '#c0c0c0');
+    rg.addColorStop(0.5, '#909090');
+    rg.addColorStop(0.85, '#707070');
+    rg.addColorStop(1, '#404040');
+    ctx.fillStyle = rg;
+    ctx.fillRect(0, ry, canvasW, rh);
+    
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillRect(0, ry, canvasW, 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(0, ry + rh, canvasW, 2);
+}
+
+/* ============================================================
+   描画：コンクリートホーム
+   ============================================================ */
+function drawPlatform() {
+    const mid = canvasH * 0.52;
+    const platformTop = mid - canvasH * 0.22;
+    const platformHeight = canvasH * 0.22;
+    
+    const platGrad = ctx.createLinearGradient(0, platformTop, 0, mid);
+    platGrad.addColorStop(0, '#c8c4be');
+    platGrad.addColorStop(0.3, '#b8b4ae');
+    platGrad.addColorStop(0.7, '#a8a49e');
+    platGrad.addColorStop(1, '#989490');
+    ctx.fillStyle = platGrad;
+    ctx.fillRect(0, platformTop, canvasW, platformHeight);
+    
+    const tileH = Math.max(18, canvasH * 0.032);
+    ctx.strokeStyle = 'rgba(80,75,70,0.35)';
+    ctx.lineWidth = 1;
+    for (let ty = platformTop + tileH; ty < mid; ty += tileH) {
+        ctx.beginPath();
+        ctx.moveTo(0, ty);
+        ctx.lineTo(canvasW, ty);
+        ctx.stroke();
+    }
+    
+    const tileW = Math.max(40, canvasW * 0.06);
+    let offsetToggle = 0;
+    for (let ty = platformTop; ty < mid; ty += tileH) {
+        offsetToggle = (offsetToggle === 0) ? tileW * 0.5 : 0;
+        for (let tx = offsetToggle; tx < canvasW; tx += tileW) {
+            ctx.beginPath();
+            ctx.moveTo(tx, ty);
+            ctx.lineTo(tx, Math.min(ty + tileH, mid));
+            ctx.stroke();
+        }
+    }
+    
+    ctx.save();
+    ctx.globalAlpha = 0.08;
+    for (let i = 0; i < 20; i++) {
+        const stainX = pseudoRand(i * 5 + 10) * canvasW;
+        const stainY = platformTop + pseudoRand(i * 5 + 11) * platformHeight;
+        const stainR = 15 + pseudoRand(i * 5 + 12) * 35;
+        const stainG = ctx.createRadialGradient(stainX, stainY, 0, stainX, stainY, stainR);
+        stainG.addColorStop(0, 'rgba(60,50,40,0.9)');
+        stainG.addColorStop(1, 'rgba(60,50,40,0)');
+        ctx.fillStyle = stainG;
+        ctx.beginPath();
+        ctx.ellipse(stainX, stainY, stainR, stainR * 0.5, pseudoRand(i)*Math.PI, 0, Math.PI*2);
+        ctx.fill();
+    }
+    ctx.restore();
+    
+    const edgeGrad = ctx.createLinearGradient(0, mid - 8, 0, mid);
+    edgeGrad.addColorStop(0, '#a09c98');
+    edgeGrad.addColorStop(1, '#706c68');
+    ctx.fillStyle = edgeGrad;
+    ctx.fillRect(0, mid - 8, canvasW, 8);
+    
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(0, mid, canvasW, 4);
+    
+    const dotY = mid - canvasH * 0.055;
+    const dotH = canvasH * 0.028;
+    ctx.fillStyle = '#d4a017';
+    ctx.fillRect(0, dotY, canvasW, dotH);
+    
+    ctx.fillStyle = '#b8880f';
+    const dotSpacingX = Math.max(12, canvasW * 0.018);
+    const dotSpacingY = dotH / 3;
+    for (let dx = dotSpacingX / 2; dx < canvasW; dx += dotSpacingX) {
+        for (let dy = dotY + dotSpacingY * 0.5; dy < dotY + dotH - dotSpacingY * 0.3; dy += dotSpacingY) {
+            ctx.beginPath();
+            ctx.arc(dx, dy, Math.max(2, dotH * 0.18), 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+}
+
+function drawStopMarker() {
+    const mid = canvasH * 0.52;
+    const platformTop = mid - canvasH * 0.22;
+    const flicker = 1 + 0.42 * Math.sin(now * 0.019) * dramaticPulse;
+    const glowR = (60 + 72 * dramaticPulse * flicker);
+    const glowHalf = glowR + 40;
+    
+    const glow = ctx.createRadialGradient(targetX, mid, 0, targetX, mid, glowR);
+    const glowCenter = 0.14 + 0.22 * dramaticPulse * flicker;
+    glow.addColorStop(0, `rgba(255,40,40,${glowCenter})`);
+    glow.addColorStop(1, 'rgba(255,50,50,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(targetX - glowHalf, platformTop, glowHalf * 2, mid - platformTop + 40);
+    
+    ctx.strokeStyle = dramaticPulse > 0.35 ? '#ff4444' : '#ff2222';
+    ctx.lineWidth = 4 + 5 * dramaticPulse * flicker;
+    const dashUnit = 12 + 4 * dramaticPulse * flicker;
+    ctx.setLineDash([dashUnit, dashUnit * 0.45]);
+    ctx.beginPath();
+    ctx.moveTo(targetX, platformTop + 20);
+    ctx.lineTo(targetX, mid + canvasH * 0.22);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
+    ctx.save();
+    ctx.font = `bold ${Math.max(14, canvasW * 0.022) * (1 + 0.08 * dramaticPulse * flicker)}px Arial`;
+    ctx.fillStyle = dramaticPulse > 0.4 ? '#ff5555' : '#ff2222';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(255,0,0,0.55)';
+    ctx.shadowBlur = 8 + 18 * dramaticPulse * flicker;
+    ctx.fillText('STOP', targetX, platformTop + 14);
+    ctx.restore();
+}
+
+/* ============================================================
+   描画：乗客5人（感情リアクション付き）
+   ============================================================ */
+function drawPassengers() {
+    const mid = canvasH * 0.52;
+    const floor = mid - canvasH * 0.055;
+    const scale = canvasH / 720;
+    
+    PASSENGERS.forEach(p => {
+        const px = canvasW * p.relX;
+        drawPerson(px, floor, p, scale);
+    });
+}
+
+function drawPerson(px, floorY, p, scale) {
+    const t = now * 0.001;
+    const S = scale;
+    
+    // 乗客の感情リアクション
+    let reactionY = 0;
+    let emotionScale = 1;
+    
+    if (gameState === 'FINISHED') {
+        if (matchResult === 'perfect') {
+            // 神業時：ピョンピョン跳ねる
+            reactionY = -Math.abs(Math.sin(t * 8 + px * 0.1)) * 20 * S;
+            emotionScale = 1 + 0.1 * Math.sin(t * 6 + px * 0.05);
+        } else if (matchResult === 'over') {
+            // オーバーラン時：落胆で動きが止まる
+            reactionY = 3 * S;
+            emotionScale = 0.95;
+        }
+    }
+    
+    const breathAmp = (matchResult === 'over') ? 0 : 1.2 * S;
+    const breathY = Math.sin(t * 1.1 + px * 0.01) * breathAmp;
+    
+    const isChild = p.pose === 'lookup';
+    const heightMul = isChild ? 0.62 : 1.0;
+    
+    const legH = 52 * S * heightMul;
+    const bodyH = 42 * S * heightMul;
+    const headR = 13 * S * heightMul * emotionScale;
+    const shoulderW = 22 * S * heightMul;
+    
+    const footY = floorY - 2 * S + reactionY;
+    const hipY = footY - legH;
+    const neckY = hipY - bodyH + breathY;
+    const headCY = neckY - headR;
+    
+    // 足・靴
+    const footOffL = p.pose === 'cane' ? -4*S : -7*S;
+    const footOffR = p.pose === 'cane' ? 6*S : 7*S;
+    
+    ctx.fillStyle = p.pose === 'businessman' ? '#1a1a1a' : (p.pose === 'tourist' ? '#8B6914' : '#333');
+    ctx.beginPath();
+    ctx.ellipse(px + footOffL, footY, 7*S*heightMul, 4*S*heightMul, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(px + footOffR, footY, 8.25*S*heightMul, 4.35*S*heightMul, 0, 0, Math.PI*2);
+    ctx.fill();
+    
+    // ズボン・スカート
+    ctx.fillStyle = p.pantsCol;
+    ctx.beginPath();
+    ctx.moveTo(px - shoulderW*0.55, hipY + 4*S);
+    ctx.lineTo(px + footOffL + 4*S, footY - 3*S);
+    ctx.lineTo(px + footOffL - 4*S, footY - 3*S);
+    ctx.lineTo(px - 2*S, hipY + 4*S);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(px + shoulderW*0.55, hipY + 4*S);
+    ctx.lineTo(px + footOffR + 4*S, footY - 3*S);
+    ctx.lineTo(px + footOffR - 4*S, footY - 3*S);
+    ctx.lineTo(px + 2*S, hipY + 4*S);
+    ctx.closePath();
+    ctx.fill();
+    
+    // ジャケット/上着
+    const topCol = p.jacketCol || p.shirtCol;
+    ctx.fillStyle = topCol;
+    ctx.beginPath();
+    ctx.moveTo(px - shoulderW, hipY + 2*S);
+    ctx.lineTo(px - shoulderW*0.9, neckY + 4*S);
+    ctx.lineTo(px - 4*S, neckY);
+    ctx.lineTo(px + 4*S, neckY);
+    ctx.lineTo(px + shoulderW*0.9, neckY + 4*S);
+    ctx.lineTo(px + shoulderW, hipY + 2*S);
+    ctx.closePath();
+    ctx.fill();
+    
+    // シャツ（インナー）
+    if (p.jacketCol) {
+        ctx.fillStyle = p.shirtCol;
+        ctx.beginPath();
+        ctx.moveTo(px - 5*S, neckY + 2*S);
+        ctx.lineTo(px + 5*S, neckY + 2*S);
+        ctx.lineTo(px + 3*S, hipY + 2*S);
+        ctx.lineTo(px - 3*S, hipY + 2*S);
+        ctx.closePath();
+        ctx.fill();
+    }
+    
+    // ネクタイ
+    if (p.tieCol) {
+        ctx.fillStyle = p.tieCol;
+        ctx.beginPath();
+        ctx.moveTo(px - 2*S, neckY + 2*S);
+        ctx.lineTo(px + 2*S, neckY + 2*S);
+        ctx.lineTo(px + 3*S, hipY + 10*S);
+        ctx.lineTo(px, hipY + 14*S);
+        ctx.lineTo(px - 3*S, hipY + 10*S);
+        ctx.closePath();
+        ctx.fill();
+    }
+    
+    // 腕（ポーズ別）
+    drawArms(px, neckY, hipY, shoulderW, S, heightMul, p, t);
+    
+    // 首
+    ctx.fillStyle = p.skinTone;
+    ctx.beginPath();
+    ctx.rect(px - 4*S*heightMul, neckY - 4*S, 8*S*heightMul, 8*S);
+    ctx.fill();
+    
+    // 頭
+    ctx.fillStyle = p.skinTone;
+    ctx.beginPath();
+    ctx.arc(px, headCY, headR, 0, Math.PI*2);
+    ctx.fill();
+    
+    // 顔（子供は上を向く）
+    const lookUp = p.pose === 'lookup' ? -0.3 : 0;
+    
+    // 目
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.arc(px - 4*S*heightMul, headCY + lookUp*headR - 1*S, 2*S*heightMul, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(px + 4*S*heightMul, headCY + lookUp*headR - 1*S, 2*S*heightMul, 0, Math.PI*2);
+    ctx.fill();
+    
+    // 口（感情に応じて変化）
+    ctx.strokeStyle = '#8B4513';
+    ctx.lineWidth = 1.2*S;
+    ctx.beginPath();
+    if (matchResult === 'perfect') {
+        // 喜びの表情
+        ctx.arc(px, headCY + lookUp*headR + 4*S*heightMul, 4*S*heightMul, 0.3, Math.PI - 0.3);
+    } else if (matchResult === 'over') {
+        // 落胆の表情
+        ctx.arc(px, headCY + lookUp*headR + 6*S*heightMul, 3*S*heightMul, Math.PI + 0.3, Math.PI*2 - 0.3);
+    } else {
+        // 通常の表情
+        ctx.arc(px, headCY + lookUp*headR + 4*S*heightMul, 3*S*heightMul, 0.1, Math.PI - 0.1);
+    }
+    ctx.stroke();
+    
+    // 髪
+    ctx.fillStyle = p.hairCol;
+    ctx.beginPath();
+    ctx.arc(px, headCY, headR, Math.PI, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(px, headCY, headR, Math.PI*1.1, Math.PI*1.9);
+    ctx.lineWidth = headR * 0.4;
+    ctx.strokeStyle = p.hairCol;
+    ctx.stroke();
+    
+    // ポーズ別アクセサリ
+    drawAccessory(px, floorY, neckY, hipY, headCY, headR, shoulderW, S, heightMul, p, t);
+}
+
+function drawArms(px, neckY, hipY, sw, S, hm, p, t) {
+    ctx.strokeStyle = p.jacketCol || p.shirtCol;
+    ctx.lineWidth = 7 * S * hm;
+    ctx.lineCap = 'round';
+    
+    const armLen = 32 * S * hm;
+    const elbowY = neckY + armLen * 0.55;
+    
+    if (p.pose === 'phone') {
+        ctx.beginPath();
+        ctx.moveTo(px - sw*0.85, neckY + 6*S);
+        ctx.quadraticCurveTo(px - sw*1.1, elbowY, px - sw*0.9, hipY + 5*S);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(px + sw*0.85, neckY + 6*S);
+        ctx.quadraticCurveTo(px + sw*1.2, elbowY - 10*S, px + sw*0.7, neckY + 8*S);
+        ctx.stroke();
+    } else if (p.pose === 'cane') {
+        ctx.beginPath();
+        ctx.moveTo(px - sw*0.85, neckY + 6*S);
+        ctx.quadraticCurveTo(px - sw*1.0, elbowY, px - sw*0.8, hipY + 5*S);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(px + sw*0.85, neckY + 6*S);
+        ctx.quadraticCurveTo(px + sw*1.1, elbowY, px + sw*1.4, hipY + 8*S);
+        ctx.stroke();
+    } else if (p.pose === 'camera') {
+        ctx.beginPath();
+        ctx.moveTo(px - sw*0.85, neckY + 6*S);
+        ctx.quadraticCurveTo(px - sw*0.5, elbowY - 8*S, px - sw*0.3, neckY + 10*S);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(px + sw*0.85, neckY + 6*S);
+        ctx.quadraticCurveTo(px + sw*0.5, elbowY - 8*S, px + sw*0.3, neckY + 10*S);
+        ctx.stroke();
+    } else {
+        ctx.beginPath();
+        ctx.moveTo(px - sw*0.85, neckY + 6*S);
+        ctx.quadraticCurveTo(px - sw*1.05, elbowY, px - sw*0.85, hipY + 5*S);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(px + sw*0.85, neckY + 6*S);
+        ctx.quadraticCurveTo(px + sw*1.05, elbowY, px + sw*0.85, hipY + 5*S);
+        ctx.stroke();
+    }
+}
+
+function drawAccessory(px, floorY, neckY, hipY, headCY, headR, sw, S, hm, p, t) {
+    if (p.pose === 'phone') {
+        ctx.fillStyle = '#111';
+        ctx.beginPath();
+        ctx.roundRect(px + sw*0.5, neckY + 2*S, 10*S, 16*S, 2);
+        ctx.fill();
+        ctx.fillStyle = '#4af';
+        ctx.fillRect(px + sw*0.52, neckY + 3*S, 6*S, 10*S);
+    }
+    
+    if (p.pose === 'cane') {
+        ctx.strokeStyle = '#8B6914';
+        ctx.lineWidth = 3*S;
+        ctx.beginPath();
+        ctx.moveTo(px + sw*1.4, hipY + 8*S);
+        ctx.lineTo(px + sw*1.6, floorY - 2*S);
+        ctx.stroke();
+        ctx.fillStyle = '#7b3f9e';
+        ctx.beginPath();
+        ctx.ellipse(px, headCY - headR + 2*S, headR*1.2, headR*0.35, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(px, headCY - headR*1.6, headR*0.8, headR*0.7, 0, 0, Math.PI*2);
+        ctx.fill();
+    }
+    
+    if (p.pose === 'stand' && p.hasLuggage) {
+        const lx = px + sw * 1.1;
+        const ly = floorY - 38*S*hm;
+        ctx.fillStyle = p.luggageCol;
+        ctx.beginPath();
+        ctx.roundRect(lx, ly, 18*S, 32*S*hm, 3);
+        ctx.fill();
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 2*S;
+        ctx.beginPath();
+        ctx.moveTo(lx + 6*S, ly);
+        ctx.lineTo(lx + 6*S, ly - 10*S);
+        ctx.lineTo(lx + 12*S, ly - 10*S);
+        ctx.lineTo(lx + 12*S, ly);
+        ctx.stroke();
+    }
+    
+    if (p.pose === 'lookup' && p.hasLuggage) {
+        ctx.fillStyle = p.luggageCol;
+        ctx.beginPath();
+        ctx.roundRect(px - sw*0.6, neckY + 4*S, 14*S*hm, 22*S*hm, 3);
+        ctx.fill();
+    }
+    
+    if (p.pose === 'camera') {
+        ctx.fillStyle = '#222';
+        ctx.beginPath();
+        ctx.roundRect(px - 10*S, neckY + 8*S, 20*S, 14*S, 3);
+        ctx.fill();
+        ctx.fillStyle = '#444';
+        ctx.beginPath();
+        ctx.arc(px, neckY + 15*S, 5*S, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = p.luggageCol;
+        ctx.beginPath();
+        ctx.roundRect(px - sw*0.7, neckY + 2*S, 16*S, 28*S, 4);
+        ctx.fill();
+    }
+    
+    if (p.pose === 'phone' && p.hasLuggage) {
+        const bx = px - sw*1.3;
+        const by = hipY + 8*S;
+        ctx.fillStyle = p.luggageCol;
+        ctx.beginPath();
+        ctx.roundRect(bx, by, 22*S, 16*S, 3);
+        ctx.fill();
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 2*S;
+        ctx.beginPath();
+        ctx.moveTo(bx + 7*S, by);
+        ctx.lineTo(bx + 7*S, by - 6*S);
+        ctx.lineTo(bx + 15*S, by - 6*S);
+        ctx.lineTo(bx + 15*S, by);
+        ctx.stroke();
+    }
+}
+
+/* ============================================================
+   描画：新幹線（両端流線型）
+   ============================================================ */
+function drawTrain(x) {
+    const mid = canvasH * 0.52;
+    const th = canvasH * 0.175;
+    const topY = mid - canvasH * 0.01 - th + TRAIN_Y_EXTRA_DOWN_PX;
+    const S = canvasH / 720;
+    
+    ctx.save();
+    ctx.translate(x, 0);
+    
+    const noseW = 160 * S;
+    const midW = 220 * S;
+    const carGap = 3 * S;
+    
+    const cars = [
+        { type:'lead_rear', ox: 0, w: noseW + 120*S },
+        { type:'mid', ox: noseW + 120*S + carGap, w: midW },
+        { type:'mid', ox: noseW + 120*S + carGap + midW + carGap, w: midW },
+        { type:'lead_front', ox: noseW + 120*S + carGap*2 + midW*2 + carGap, w: noseW + 120*S },
+    ];
+    
+    cars.forEach(c => drawCarShadow(c.ox, topY, c.w, th, S));
+    cars.forEach(c => drawCarBody2(c.ox, topY, c.w, th, c.type, S));
+    
+    const totalW = cars[cars.length-1].ox + cars[cars.length-1].w;
+    const bogieXList = [
+        noseW*0.3,
+        noseW*0.8 + 60*S,
+        noseW + 120*S + midW*0.25,
+        noseW + 120*S + midW*0.75,
+        noseW + 120*S + carGap + midW + midW*0.25,
+        noseW + 120*S + carGap + midW + midW*0.75,
+        totalW - noseW*0.8 - 60*S,
+        totalW - noseW*0.3,
+    ];
+    bogieXList.forEach(bx => drawBogie(bx, topY + th, S));
+    
+    ctx.restore();
+}
+
+function drawCarShadow(ox, topY, w, th, S) {
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.beginPath();
+    ctx.ellipse(ox + w/2, topY + th + 4*S, w*0.45, 6*S, 0, 0, Math.PI*2);
+    ctx.fill();
+}
+
+function drawCarBody2(ox, topY, w, th, type, S) {
+    const noseL = 150 * S;
+    const archH = th * 0.12;
+    
+    ctx.beginPath();
+    
+    if (type === 'lead_front') {
+        const noseX = ox + w;
+        const noseTY = topY + th * 0.46;
+        const noseBY = topY + th * 0.80;
+        const midY = (noseTY + noseBY) / 2;
+
+        ctx.moveTo(ox, topY);
+        ctx.lineTo(ox + w - noseL, topY - archH);
+        ctx.bezierCurveTo(ox + w - noseL*0.4, topY - archH*0.5, ox + w - noseL*0.05, topY + th*0.18, noseX, noseTY);
+        ctx.bezierCurveTo(noseX + 20*S, noseTY + (noseBY-noseTY)*0.22, noseX + 20*S, noseTY + (noseBY-noseTY)*0.78, noseX, noseBY);
+        ctx.bezierCurveTo(ox + w - noseL*0.05, topY + th*0.86, ox + w - noseL*0.4, topY + th*1.02, ox + w - noseL, topY + th);
+        ctx.lineTo(ox, topY + th);
+
+    } else if (type === 'lead_rear') {
+        const noseX = ox;
+        const noseTY = topY + th * 0.46;
+        const noseBY = topY + th * 0.80;
+        const midY = (noseTY + noseBY) / 2;
+
+        ctx.moveTo(ox + w, topY);
+        ctx.lineTo(ox + noseL, topY - archH);
+        ctx.bezierCurveTo(ox + noseL*0.4, topY - archH*0.5, ox + noseL*0.05, topY + th*0.18, noseX, noseTY);
+        ctx.bezierCurveTo(noseX - 20*S, noseTY + (noseBY-noseTY)*0.22, noseX - 20*S, noseTY + (noseBY-noseTY)*0.78, noseX, noseBY);
+        ctx.bezierCurveTo(ox + noseL*0.05, topY + th*0.86, ox + noseL*0.4, topY + th*1.02, ox + noseL, topY + th);
+        ctx.lineTo(ox + w, topY + th);
+        
+    } else {
+        ctx.moveTo(ox, topY);
+        ctx.lineTo(ox + w, topY);
+        ctx.lineTo(ox + w, topY + th);
+        ctx.lineTo(ox, topY + th);
+    }
+    
+    ctx.closePath();
+    
+    const bodyG = ctx.createLinearGradient(ox, topY - archH, ox, topY + th);
+    bodyG.addColorStop(0, '#f2f2f5');
+    bodyG.addColorStop(0.08, '#ffffff');
+    bodyG.addColorStop(0.4, '#ebebef');
+    bodyG.addColorStop(0.72, '#d8d8de');
+    bodyG.addColorStop(1, '#b8b8c0');
+    ctx.fillStyle = bodyG;
+    ctx.fill();
+    
+    ctx.strokeStyle = 'rgba(160,160,170,0.6)';
+    ctx.lineWidth = 1.2 * S;
+    ctx.stroke();
+    
+    ctx.save();
+    ctx.clip();
+    
+    const blueG = ctx.createLinearGradient(ox, topY+th*0.58, ox, topY+th*0.82);
+    blueG.addColorStop(0, '#002fa7');
+    blueG.addColorStop(0.35, '#0040cc');
+    blueG.addColorStop(0.65, '#002fa7');
+    blueG.addColorStop(1, '#001e7a');
+    ctx.fillStyle = blueG;
+    ctx.fillRect(ox - 10, topY + th*0.58, w + 20, th*0.24);
+    
+    ctx.fillStyle = '#0044cc';
+    ctx.fillRect(ox - 10, topY + th*0.18, w + 20, th*0.028);
+    
+    ctx.restore();
+    
+    drawWindows(ox, topY, w, th, type, S, noseL);
+    
+    if (type === 'lead_front') drawCabFront(ox, topY, w, th, S, noseL);
+    if (type === 'lead_rear') drawCabRear(ox, topY, w, th, S, noseL);
+}
+
+function drawWindows(ox, topY, w, th, type, S, noseL) {
+    const winW = 26 * S;
+    const winH = th * 0.30;
+    const winY = topY + th * 0.10;
+    const winGap = 40 * S;
+    const winR = 3 * S;
+
+    let startX, endX;
+    if (type === 'lead_front') {
+        startX = ox + 14*S;
+        endX = ox + w - noseL - 10*S;
+    } else if (type === 'lead_rear') {
+        startX = ox + noseL + 14*S;
+        endX = ox + w - 14*S;
+    } else {
+        startX = ox + 14*S;
+        endX = ox + w - 14*S;
+    }
+
+    for (let wx = startX; wx + winW < endX; wx += winGap) {
+        // 枠（ダークグレー）
+        ctx.fillStyle = 'rgba(80,80,90,0.9)';
+        ctx.beginPath();
+        ctx.roundRect(wx - 2, winY - 2, winW + 4, winH + 4, winR + 2);
+        ctx.fill();
+
+        // 窓ガラス（ダークブルー グラデーション）
+        const wg = ctx.createLinearGradient(wx, winY, wx, winY + winH);
+        wg.addColorStop(0, '#1a2e50');
+        wg.addColorStop(0.35, '#1e3a66');
+        wg.addColorStop(0.7, '#152840');
+        wg.addColorStop(1, '#0a1828');
+        ctx.fillStyle = wg;
+        ctx.beginPath();
+        ctx.roundRect(wx, winY, winW, winH, winR);
+        ctx.fill();
+
+        // 反射光（左上に白いハイライト）
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.beginPath();
+        ctx.roundRect(wx + 2, winY + 2, winW * 0.38, winH * 0.42, winR * 0.5);
+        ctx.fill();
+    }
+}
+
+/** 先頭車：キャノピー窓なし・前照灯のみ（後位先頭も同様に尾灯のみ） */
+function drawCabFront(ox, topY, w, th, S, noseL) {
+    const noseX = ox + w;
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,255,210,0.9)';
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = '#fffde0';
+    ctx.beginPath();
+    ctx.ellipse(noseX - noseL * 0.3, topY + th * 0.54, 6.5 * S, 4 * S, -0.12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawCabRear(ox, topY, w, th, S, noseL) {
+    const noseX = ox;
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,50,50,0.7)';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = '#ff3333';
+    ctx.beginPath();
+    ctx.ellipse(noseX + noseL * 0.3, topY + th * 0.54, 5 * S, 3.3 * S, 0.12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
+function getTrainNoseOffsetPx() {
+    const S = canvasH / 720;
+    const noseW = 160 * S;
+    const midW = 220 * S;
+    const carGap = 3 * S;
+    return (noseW + 120 * S + carGap * 2 + midW * 2 + carGap) + (noseW + 120 * S);
+}
+
+function drawBogie(bx, bodyBottomY, S) {
+    const by = bodyBottomY - 4*S;
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(bx - 18*S, by, 36*S, 8*S);
+    [bx - 10*S, bx + 10*S].forEach(wx => {
+        ctx.fillStyle = '#1a1a1a';
+        ctx.beginPath();
+        ctx.arc(wx, by + 10*S, 8*S, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = '#666';
+        ctx.beginPath();
+        ctx.arc(wx - 2*S, by + 8*S, 2*S, 0, Math.PI*2);
+        ctx.fill();
+    });
+}
+
+/* ============================================================
+   スコア計算（拡張評価システム）
+   ============================================================ */
+function calculateScore() {
+    const trainNoseX = trainX + getTrainNoseOffsetPx();
+    const diff = Math.abs(trainNoseX - targetX);
+    
+    // ブレーキタイミング評価
+    const brakeDist = (brakeStartX != null) ? Math.abs(brakeStartX - targetX) : null;
+    let timingEval = '';
+    
+    if (brakeDist !== null) {
+        if (brakeDist < canvasW * 0.15) {
+            timingEval = '攻めた';
+        } else if (brakeDist > canvasW * 0.4) {
+            timingEval = '安全運転';
+        }
+    }
+    
+    let resultText, colorClass;
+    
+    if (diff < 10) {
+        resultText = timingEval ? `神業！${timingEval}ブレーキ！🎉` : '神業！ ぴったし！🎉';
+        colorClass = 'text-yellow-400';
+        matchResult = 'perfect';
+        successStreak++;
+    } else if (diff < 50) {
+        resultText = timingEval ? `${timingEval}ナイスストップ！👍` : 'ナイスストップ！👍';
+        colorClass = 'text-green-400';
+        matchResult = 'good';
+        successStreak++;
+    } else if (trainNoseX < targetX) {
+        resultText = '手前すぎます...😅';
+        colorClass = 'text-blue-400';
+        matchResult = 'bad';
+        successStreak = 0;
+    } else {
+        resultText = 'オーバーラン！😱';
+        colorClass = 'text-red-500';
+        matchResult = 'over';
+        successStreak = 0;
+    }
+    
+    // ベストスコア更新
+    const isNewBest = diff < bestDiff;
+    if (isNewBest) {
+        bestDiff = diff;
+        localStorage.setItem('sakurazawa_best', bestDiff);
+    }
+    
+    localStorage.setItem('sakurazawa_streak', successStreak);
+    
+    // 連続成功ボーナス表示
+    const streakBonus = successStreak >= 3 ? ` 🔥${successStreak}連続成功！` : '';
+    
+    statusEl.innerText = `${resultText}${streakBonus}\n③「もう一度挑戦」ボタン`;
+    scoreEl.className = `text-4xl font-bold ${colorClass}`;
+    scoreEl.innerText = `ズレ: ${(diff / 10).toFixed(1)}m${isNewBest ? ' 🆕ベスト更新！' : ''}`;
+    
+    updateBestDisplay();
+    syncActionButtonUI();
+}
+
+/* ============================================================
+   メインループ
+   ============================================================ */
+function update(timestamp) {
+    now = timestamp || performance.now();
+    
+    if (gameState === 'MOVING') {
+        trainX += speed;
+        if (trainX > canvasW) {
+            gameState = 'FINISHED';
+            matchResult = 'over';
+            successStreak = 0;
+            localStorage.setItem('sakurazawa_streak', 0);
+            statusEl.innerText = 'オーバーラン！！🚨（失格）\n③「もう一度挑戦」ボタン';
+            scoreEl.innerText = '失格';
+            scoreEl.className = 'text-4xl font-bold text-red-500';
+            muteTrainSynth();
+            updateBestDisplay();
+            syncActionButtonUI();
+        }
+    } else if (gameState === 'BRAKING') {
+        brakePressure = Math.min(1.0, brakePressure + BRAKE_RAMP);
+        speed -= speed * DRAG_K;
+        speed -= brakePressure * MAX_DECEL;
+        if (speed < 0) speed = 0;
+        trainX += speed;
+        
+        if (speed < STOP_SPEED) {
+            speed = 0;
+            gameState = 'FINISHED';
+            calculateScore();
+        }
+    }
+    
+    dramaticPulse = (gameState === 'BRAKING') ? computeBrakingPulse(trainX, speed) : 0;
+    
+    ctx.clearRect(0, 0, canvasW, canvasH);
+    
+    ctx.save();
+    const shakeAmp = dramaticPulse * Math.min(canvasW, canvasH) * 0.0068;
+    ctx.translate(
+        Math.sin(now * 0.024) * shakeAmp,
+        Math.cos(now * 0.0205) * shakeAmp * 0.58
+    );
+    
+    drawSky();
+    drawTrackBed();
+    drawPlatform();
+    drawStopMarker();
+    drawPassengers();
+    drawTrain(trainX);
+    
+    ctx.restore();
+    
+    drawHUD();
+
+    updateTrainSynth();
+
+    requestAnimationFrame(update);
+}
+
+/* ============================================================
+   ユーティリティ
+   ============================================================ */
+function pseudoRand(n) {
+    const x = Math.sin(n + 1) * 43758.5453;
+    return x - Math.floor(x);
+}
+
+function computeBrakingPulse(trainPosX, spd) {
+    const nx = trainPosX + getTrainNoseOffsetPx();
+    const dist = Math.abs(nx - targetX);
+    const zone = Math.max(160, canvasW * 0.22);
+    let p = Math.max(0, 1 - dist / zone);
+    p *= Math.min(1, spd / 2.2);
+    return p;
+}
+
+/* ============================================================
+   起動
+   ============================================================ */
+init();
+requestAnimationFrame(update);
+</script>
 </body>
 </html>
